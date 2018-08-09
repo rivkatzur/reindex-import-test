@@ -6,9 +6,11 @@ var shell = require('shelljs');
 const csv=require('csvtojson')
 var path = require("path");
 var inputPath = path.resolve(config.root, 'files');
+var fs = require('fs');
+var extract = require('extract-zip')
+var request = require('request');
 
-const limit = 100; //10,100,1000,10000
-
+const limit = 10000; //10,100,1000,10000
 function ImportFromApi(mongoose) {
     if (mongoose) {
         this.Records = mongoose.model('Record');
@@ -49,9 +51,9 @@ ImportFromApi.prototype.parseCSV = (csvString) => {
 /*
 * Make an async request using https
 */
-ImportFromApi.prototype.httpGetAsync = (query, parse_xml = true) => {
+ImportFromApi.prototype.httpGetAsync = (query, parse_xml = true, zip) => {
     return new Promise((resolve, reject) => {
-        const request = https.get(query, response => {
+        const requestGet = https.get(query, response => {
             if (response.statusCode < 200 || response.statusCode > 299) {
                 reject(new Error('Failed to load page, status code: ' + response.statusCode));
             };
@@ -61,13 +63,72 @@ ImportFromApi.prototype.httpGetAsync = (query, parse_xml = true) => {
                 resolve(parse_xml ? parseXML(data) : data);
             });
         });
-        request.on('error', (error) => reject(error));
+        requestGet.on('error', (error) => reject(error));
+    });
+}
+
+const getLocation = (locations) => {
+    if (locations.constructor === Array) {
+        return locations.map((location) => {
+            return [location.facility.address.city, location.facility.address.state, location.facility.address.zip, location.facility.address.country].join(',')
+        }).join('|');
+    }
+    const location = locations;
+    return [location.facility.address.city, location.facility.address.state, location.facility.address.zip, location.facility.address.country].join(',');
+}
+
+ImportFromApi.prototype.httpGetAsync1 = (query, parse_xml = true, zip) => {
+    return new Promise((resolve, reject) => {
+        const r = request(query)
+        .on('error', function(err) {
+            console.log(err)
+            reject(err)
+          })
+        .pipe(fs.createWriteStream(`${inputPath}/search.zip`))
+        .on('close', function () {
+            // fs.createReadStream(`${inputPath}/search.zip`).pipe(unzip.Extract({ path: `${inputPath}/search`}));
+            const titles = ['Rank','NCT Number','Title','Summary','Acronym','Status','Conditions','Interventions','Sponsor/Collaborators','Gender','minimum_age','maximum_age','Phases','Enrollment','Funded Bys','Study Type','Study Designs','Other IDs','Start Date','Primary Completion Date','Completion Date','First Posted',
+            'Results First Posted','Last Update Posted','Locations','Study Documents','URL','contact'];
+            fs.writeFile(`${inputPath}/records.csv`, titles, 'utf8', function(err) {
+                extract(`${inputPath}/search.zip`, {dir: `${inputPath}/search`}, function (err) {
+                    fs.readdir(`${inputPath}/search`, function( err, files ) {
+                        let counter = files.length;
+                        files.forEach( function( file, index ) {
+                            fs.readFile(`${inputPath}/search/${file}`, (err, data) => {
+                                if (err) throw err;
+                                let record = parseXML(data);
+                                record = record.clinical_study;
+                                let parsedRecord = record.rank+","+ record.id_info.nct_id+","
+                                +'"'+ record.brief_title+'"'+","
+                                +'"'+ record.brief_summary.textblock.replace(/"/g,"'")+'"'+','
+                                + (record.acronym || '')+","+ record.overall_status+','
+                                +'"'+record.condition+'"'+','
+                                +'"'+record.intervention+'"'+
+                                ','+'Sponsor/Collaborators'+','+record.eligibility.gender+','+record.eligibility.minimum_age+','+record.eligibility.maximum_age+','+'Phases'+','+record.enrollment._+','+'Funded Bys'+','+'Study Type'+','+'Study Designs'+','+'Other IDs'+','+'Start Date'+','+'Primary Completion Date'+','+'Completion Date'+','+'First Posted'+','
+                                +'Results First Posted'+','+'Last Update Posted'+','
+                                +'"'+getLocation(record.location)+'"'
+                                +','+'Study Documents'+','+'URL'+','
+                                +'"'+(record.overall_contact ? record.overall_contact.last_name : '')+'"';
+                                fs.appendFile(`${inputPath}/records.csv`, `\n${parsedRecord}`, function (err) {
+                                    if (err) throw err;
+                                    counter--;
+                                    if (counter === 0) {
+                                        return resolve('saved');
+                                    }
+                                  });
+                            });
+                        
+                        });
+                    });
+                })
+            });
+            
+        });
     });
 }
 
 ImportFromApi.prototype.getResults = function(i) {
-    return this.httpGetAsync("https://clinicaltrials.gov/ct2/results/download_fields?cond=Stroke&Search=Apply&recrs=a&recrs=f&cntry1=NA:US&down_count="+limit+"&down_fmt=csv&down_chunk="+i+"&down_flds=all", false).then(result => result);
-    //.catch(err => {err: err; index: i});    
+    return this.httpGetAsync1("https://clinicaltrials.gov/ct2/download_studies?cond=Stroke&Search=Apply&recrs=a&recrs=f&cntry1=NA:US&down_count="+limit+"&down_fmt=csv&down_chunk="+i+"&down_flds=all", false, true).then(result => result);  
 }
 
 ImportFromApi.prototype.count = function() {
@@ -96,13 +157,11 @@ ImportFromApi.prototype.upload = function(req,res,next) {
         };
         this.emitter.once('finish-reindex-import-from-api', function () {
             console.log('continue')
-            for (var i = 1; i < ((count / limit) + 1); i += 1) {
-                let sourceFile = `${inputPath}/records${i}.csv`;
-                self.mongoImport(sourceFile, {'locationString': 'Locations'}).then(err => {
-                    if (err) return res.status(400).send(err.message);
-                    next();
-                });
-            }
+            let sourceFile = `${inputPath}/records.csv`;
+            self.mongoImport(sourceFile, {'locationString': 'Locations', 'id': 'NCT Number'}).then(err => {
+                if (err) return res.status(400).send(err.message);
+                next();
+            });
         });
     });
 } 
