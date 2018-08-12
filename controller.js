@@ -105,7 +105,8 @@ ImportFromApi.prototype.httpGetAsync1 = (query, parse_xml = true, zip) => {
                                 +'"'+record.condition+'"'+','
                                 +'"'+record.intervention+'"'+
                                 ','+'Sponsor/Collaborators'+','+record.eligibility.gender+','+record.eligibility.minimum_age+','+record.eligibility.maximum_age+','+'Phases'+','+record.enrollment._+','+'Funded Bys'+','+'Study Type'+','+'Study Designs'+','+'Other IDs'+','+'Start Date'+','+'Primary Completion Date'+','+'Completion Date'+','+'First Posted'+','
-                                +'Results First Posted'+','+'Last Update Posted'+','
+                                +'Results First Posted'+','
+                                +'"'+ record.last_update_posted._+'"' +','
                                 +'"'+getLocation(record.location)+'"'
                                 +','+'Study Documents'+','+'URL'+','
                                 +'"'+(record.overall_contact ? record.overall_contact.last_name : '')+'"';
