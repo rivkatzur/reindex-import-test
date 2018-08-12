@@ -6,7 +6,7 @@ module.exports = function(cron, db) {
     
     var job = schedule.scheduleJob(cron, function(){
         console.log('Start import records!');
-        // importRecordsCtrl.start(null, null, function(){
+          importRecordsCtrl.start(null, null, function(){
             importRecordsCtrl.upload(null, null, function(){
                 importRecordsCtrl.arrange(null, null, function(){
                     importRecordsCtrl.saveRecords(null, null, function(){
@@ -16,7 +16,7 @@ module.exports = function(cron, db) {
                     });
                 });
             });
-        // });
+         });
     });
 
     // console.log(job.nextInvocation(), new Date());
