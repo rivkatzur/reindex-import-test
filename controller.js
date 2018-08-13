@@ -9,7 +9,7 @@ var inputPath = path.resolve(config.root, 'files');
 var fs = require('fs');
 var extract = require('extract-zip')
 var request = require('request');
-
+var toolsPath = path.resolve(config.root, 'tools');
 const limit = 10000; //10,100,1000,10000
 function ImportFromApi(mongoose) {
     if (mongoose) {
@@ -104,7 +104,7 @@ ImportFromApi.prototype.httpGetAsync1 = (query, parse_xml = true, zip) => {
                                 + (record.acronym || '')+","+ record.overall_status+','
                                 +'"'+record.condition+'"'+','
                                 +'"'+record.intervention+'"'+
-                                ','+record.sponsors.lead_sponsor.agency+','+record.eligibility.gender+','+record.eligibility.minimum_age+','+record.eligibility.maximum_age+','+'Phases'+','+record.enrollment._+','+'Funded Bys'+','+'Study Type'+','+'Study Designs'+','+'Other IDs'+','+'Start Date'+','+'Primary Completion Date'+','+'Completion Date'+','+'First Posted'+','
+                                ','+'"'+record.sponsors.lead_sponsor.agency+'"'+','+record.eligibility.gender+','+record.eligibility.minimum_age+','+record.eligibility.maximum_age+','+'Phases'+','+record.enrollment._+','+'Funded Bys'+','+'Study Type'+','+'Study Designs'+','+'Other IDs'+','+'Start Date'+','+'Primary Completion Date'+','+'Completion Date'+','+'First Posted'+','
                                 +'Results First Posted'+','
                                 +'"'+ record.last_update_posted._+'"' +','
                                 +'"'+getLocation(record.location)+'"'
@@ -140,6 +140,7 @@ ImportFromApi.prototype.start = function(req,res,next) {
     let self = this;
     console.log('curl -XDELETE ' + this.config.elastic.host + ':' + this.config.elastic.port + '/reindex-records')
     shell.exec('curl -XDELETE ' + this.config.elastic.host + ':' + this.config.elastic.port + '/reindex-records', function(err, result){
+        shell.exec(`sh ${toolsPath}/recordsMapping.sh`);
         self.Records.deleteMany({}, function (err, results) {
             next(); 
         });
